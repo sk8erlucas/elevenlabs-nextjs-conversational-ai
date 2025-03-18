@@ -14,34 +14,50 @@ const VoiceChat = () => {
   const [hasPermission, setHasPermission] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [agentVideo, setAgentVideo] = useState("/agent_01_idle.mp4");
 
   const conversation = useConversation({
     onConnect: () => {
-      console.log("Connected to ElevenLabs");
+      console.log("Conectado a ElevenLabs");
+      setAgentVideo("/agent_01_idle.mp4");
     },
     onDisconnect: () => {
-      console.log("Disconnected from ElevenLabs");
+      console.log("Desconectado de ElevenLabs");
+      setAgentVideo("/agent_01_idle.mp4");
     },
     onMessage: (message) => {
-      console.log("Received message:", message);
+      console.log("Mensaje recibido:", message);
     },
     onError: (error: string | Error) => {
       setErrorMessage(typeof error === "string" ? error : error.message);
       console.error("Error:", error);
+      setAgentVideo("/agent_01_error.mp4");
     },
   });
 
   const { status, isSpeaking } = conversation;
 
   useEffect(() => {
-    // Request microphone permission on component mount
+    if (status === "connected") {
+      if (isSpeaking) {
+        setAgentVideo("/agent_01_speaking.mp4");
+      } else {
+        setAgentVideo("/agent_01_listening.mp4");
+      }
+    } else {
+      setAgentVideo("/agent_01_idle.mp4");
+    }
+  }, [status, isSpeaking]);
+
+  useEffect(() => {
+    // Solicitar permiso de micrófono al montar el componente
     const requestMicPermission = async () => {
       try {
         await navigator.mediaDevices.getUserMedia({ audio: true });
         setHasPermission(true);
       } catch (error) {
-        setErrorMessage("Microphone access denied");
-        console.error("Error accessing microphone:", error);
+        setErrorMessage("Acceso al micrófono denegado");
+        console.error("Error al acceder al micrófono:", error);
       }
     };
 
@@ -50,14 +66,14 @@ const VoiceChat = () => {
 
   const handleStartConversation = async () => {
     try {
-      // Replace with your actual agent ID or URL
+      // Reemplazar con tu ID de agente real o URL
       const conversationId = await conversation.startSession({
         agentId: process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID!,
       });
-      console.log("Started conversation:", conversationId);
+      console.log("Conversación iniciada:", conversationId);
     } catch (error) {
-      setErrorMessage("Failed to start conversation");
-      console.error("Error starting conversation:", error);
+      setErrorMessage("Error al iniciar la conversación");
+      console.error("Error al iniciar la conversación:", error);
     }
   };
 
@@ -65,8 +81,8 @@ const VoiceChat = () => {
     try {
       await conversation.endSession();
     } catch (error) {
-      setErrorMessage("Failed to end conversation");
-      console.error("Error ending conversation:", error);
+      setErrorMessage("Error al finalizar la conversación");
+      console.error("Error al finalizar la conversación:", error);
     }
   };
 
@@ -75,8 +91,8 @@ const VoiceChat = () => {
       await conversation.setVolume({ volume: isMuted ? 1 : 0 });
       setIsMuted(!isMuted);
     } catch (error) {
-      setErrorMessage("Failed to change volume");
-      console.error("Error changing volume:", error);
+      setErrorMessage("Error al cambiar el volumen");
+      console.error("Error al cambiar el volumen:", error);
     }
   };
 
@@ -84,7 +100,7 @@ const VoiceChat = () => {
     <Card className="w-full max-w-md mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          Voice Chat
+          Chat de Voz
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -103,6 +119,16 @@ const VoiceChat = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          <div className="relative aspect-video mb-4 rounded-lg overflow-hidden bg-gray-100">
+            <video 
+              src={agentVideo} 
+              className="w-full h-full object-cover" 
+              autoPlay 
+              loop 
+              muted 
+            />
+          </div>
+
           <div className="flex justify-center">
             {status === "connected" ? (
               <Button
@@ -111,7 +137,7 @@ const VoiceChat = () => {
                 className="w-full"
               >
                 <MicOff className="mr-2 h-4 w-4" />
-                End Conversation
+                Finalizar Conversación
               </Button>
             ) : (
               <Button
@@ -120,7 +146,7 @@ const VoiceChat = () => {
                 className="w-full"
               >
                 <Mic className="mr-2 h-4 w-4" />
-                Start Conversation
+                Iniciar Conversación
               </Button>
             )}
           </div>
@@ -128,13 +154,13 @@ const VoiceChat = () => {
           <div className="text-center text-sm">
             {status === "connected" && (
               <p className="text-green-600">
-                {isSpeaking ? "Agent is speaking..." : "Listening..."}
+                {isSpeaking ? "El agente está hablando..." : "Escuchando..."}
               </p>
             )}
             {errorMessage && <p className="text-red-500">{errorMessage}</p>}
             {!hasPermission && (
               <p className="text-yellow-600">
-                Please allow microphone access to use voice chat
+                Por favor, permite el acceso al micrófono para usar el chat de voz
               </p>
             )}
           </div>
