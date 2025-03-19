@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 
 // ElevenLabs
 import { useConversation } from "@11labs/react";
@@ -9,21 +9,10 @@ import { useConversation } from "@11labs/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
-import {
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Dialog
-} from "./ui/dialog";
 
-// Definimos el tipo para los mensajes con tipos más amplios para compatibilidad
-interface Message {
-  id: string;
-  text: string | undefined; // Ahora acepta undefined
-  sender: "user" | "agent";
-  timestamp: string; // Usamos string en lugar de Date para serialización
-}
+// Tipos
+import { Message } from "@/types/message";
+import { sendToEvaluation } from "@/lib/utils";
 
 const VoiceChat = () => {
   const [hasPermission, setHasPermission] = useState(false);
@@ -32,47 +21,63 @@ const VoiceChat = () => {
   const [agentVideo, setAgentVideo] = useState("/agent_01_idle.mp4");
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string>("");
-  const [showConversationDialog, setShowConversationDialog] = useState(false);
+
+  // Usar una ref para mantener una copia actualizada de los mensajes que se pueda acceder desde callbacks
+  const messagesRef = useRef<Message[]>([]);
+
+  // Actualizar la ref cada vez que cambia el estado de mensajes
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const conversation = useConversation({
     onConnect: () => {
       console.log("Conectado a ElevenLabs");
       setAgentVideo("/agent_01_idle.mp4");
     },
-    onDisconnect: () => {
+    onDisconnect: async () => {
       console.log("Desconectado de ElevenLabs");
       setAgentVideo("/agent_01_idle.mp4");
 
-      // Mostrar el diálogo con la conversación si hay mensajes
-      if (messages.length > 0) {
-        setShowConversationDialog(true);
+      try {
+        // Usar la nueva función para enviar los mensajes para evaluación
+        const result = await sendToEvaluation(messagesRef.current);
+
+        console.log("Resultado de evaluación:", result);
+
+        alert(
+          "Evaluación finalizada y enviada a su revisión, gracias por su tiempo"
+        );
+      } catch (error) {
+        console.error("Error al enviar mensajes para evaluación:", error);
+        setErrorMessage("Error al enviar mensajes para evaluación");
       }
     },
     onMessage: (message) => {
       console.log("Mensaje recibido:", message);
 
-      // Guardar mensaje del agente
-      if (message.text) {
+      // Corregimos para adaptarnos a la estructura real de los mensajes
+      if (message.source === "ai" && message.message) {
         const newMessage: Message = {
           id: `agent-${Date.now()}`,
-          text: message.text,
+          text: message.message,
           sender: "agent",
           timestamp: new Date().toISOString(),
         };
 
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages((prevMessages) => [...prevMessages, newMessage]);
       }
 
       // Guardar mensaje del usuario si está presente
-      if (message.userInput) {
+      if (message.source === "user" && message.message) {
         const userMessage: Message = {
           id: `user-${Date.now()}`,
-          text: message.userInput,
+          text: message.message,
           sender: "user",
           timestamp: new Date().toISOString(),
         };
 
-        setMessages((prev) => [...prev, userMessage]);
+        setMessages((prevMessages) => [...prevMessages, userMessage]);
       }
     },
     onError: (error: string | Error) => {
@@ -130,8 +135,11 @@ const VoiceChat = () => {
 
   const handleEndConversation = async () => {
     try {
+      // Hacer un registro de los mensajes ANTES de terminar la sesión
+      console.log("Mensajes antes de finalizar:", messages);
+
       await conversation.endSession();
-      // El diálogo se mostrará automáticamente en el evento onDisconnect
+      // El onDisconnect se encargará de mostrar la alerta y hacer el console.log
     } catch (error) {
       setErrorMessage("Error al finalizar la conversación");
       console.error("Error al finalizar la conversación:", error);
@@ -148,13 +156,18 @@ const VoiceChat = () => {
     }
   };
 
-  const exportConversation = () => {
-    // Crear un objeto con los detalles de la conversación
-    const conversationData = {
+  // Añadimos una función específica para exportar que podamos usar en cualquier momento
+  const getConversationData = () => {
+    return {
       id: conversationId,
       timestamp: new Date().toISOString(),
-      messages: messages,
+      messages: messagesRef.current, // Usar la ref para acceder a los mensajes actualizados
     };
+  };
+
+  const exportConversation = () => {
+    // Obtener los datos de la conversación
+    const conversationData = getConversationData();
 
     // Convertir a JSON y crear un blob
     const jsonData = JSON.stringify(conversationData, null, 2);
@@ -179,151 +192,103 @@ const VoiceChat = () => {
     return date.toLocaleTimeString();
   };
 
+  // Añadimos este useEffect para depurar y confirmar que los mensajes se guardan
+  useEffect(() => {
+    if (messages.length > 0) {
+      console.log(
+        `Estado de mensajes actualizado: ${messages.length} mensajes guardados`
+      );
+    }
+  }, [messages]);
+
   return (
-    <>
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Chat de Voz
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={toggleMute}
-                disabled={status !== "connected"}
-              >
-                {isMuted ? (
-                  <VolumeX className="h-4 w-4" />
-                ) : (
-                  <Volume2 className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={exportConversation}
-                disabled={messages.length === 0}
-                title="Exportar conversación"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="relative aspect-video mb-4 rounded-lg overflow-hidden bg-gray-100">
-              <video
-                src={agentVideo}
-                className="w-full h-full object-cover"
-                autoPlay
-                loop
-                muted
-              />
-            </div>
-
-            {/* Indicador de mensajes guardados */}
-            {messages.length > 0 && (
-              <div className="text-xs text-gray-500 mb-2 text-center">
-                {messages.length} mensajes guardados
-              </div>
-            )}
-
-            <div className="flex justify-center">
-              {status === "connected" ? (
-                <Button
-                  variant="destructive"
-                  onClick={handleEndConversation}
-                  className="w-full"
-                >
-                  <MicOff className="mr-2 h-4 w-4" />
-                  Finalizar Conversación
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleStartConversation}
-                  disabled={!hasPermission}
-                  className="w-full"
-                >
-                  <Mic className="mr-2 h-4 w-4" />
-                  Iniciar Conversación
-                </Button>
-              )}
-            </div>
-
-            <div className="text-center text-sm">
-              {status === "connected" && (
-                <p className="text-green-600">
-                  {isSpeaking ? "El agente está hablando..." : "Escuchando..."}
-                </p>
-              )}
-              {errorMessage && <p className="text-red-500">{errorMessage}</p>}
-              {!hasPermission && (
-                <p className="text-yellow-600">
-                  Por favor, permite el acceso al micrófono para usar el chat de
-                  voz
-                </p>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Diálogo para mostrar la conversación completa */}
-      <Dialog
-        open={showConversationDialog}
-        onOpenChange={setShowConversationDialog}
-      >
-        <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Resumen de la Conversación</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 my-4">
-            {messages.length === 0 ? (
-              <p className="text-center text-gray-500">
-                No hay mensajes en esta conversación.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`p-3 rounded-lg ${
-                      msg.sender === "user"
-                        ? "bg-blue-100 ml-8"
-                        : "bg-gray-100 mr-8"
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-1 text-xs text-gray-500">
-                      <span>{msg.sender === "user" ? "Tú" : "Agente"}</span>
-                      <span>{formatTimestamp(msg.timestamp)}</span>
-                    </div>
-                    <p>{msg.text}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          Chat de Voz
+          <div className="flex gap-2">
             <Button
-              onClick={exportConversation}
-              disabled={messages.length === 0}
+              variant="outline"
+              size="icon"
+              onClick={toggleMute}
+              disabled={status !== "connected"}
             >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar Conversación
+              {isMuted ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <Volume2 className="h-4 w-4" />
+              )}
             </Button>
             <Button
               variant="outline"
-              onClick={() => setShowConversationDialog(false)}
+              size="icon"
+              onClick={exportConversation}
+              disabled={messages.length === 0}
+              title="Exportar conversación"
             >
-              Cerrar
+              <Download className="h-4 w-4" />
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="relative aspect-video mb-4 rounded-lg overflow-hidden bg-gray-100">
+            <video
+              src={agentVideo}
+              className="w-full h-full object-cover"
+              autoPlay
+              loop
+              muted
+            />
+          </div>
+
+          {/* Indicador de mensajes guardados */}
+          {messages.length > 0 && (
+            <div className="text-xs text-gray-500 mb-2 text-center">
+              {messages.length} mensajes guardados
+            </div>
+          )}
+
+          <div className="flex justify-center">
+            {status === "connected" ? (
+              <Button
+                variant="destructive"
+                onClick={handleEndConversation}
+                className="w-full"
+              >
+                <MicOff className="mr-2 h-4 w-4" />
+                Finalizar Conversación
+              </Button>
+            ) : (
+              <Button
+                onClick={handleStartConversation}
+                disabled={!hasPermission}
+                className="w-full"
+              >
+                <Mic className="mr-2 h-4 w-4" />
+                Iniciar Conversación
+              </Button>
+            )}
+          </div>
+
+          <div className="text-center text-sm">
+            {status === "connected" && (
+              <p className="text-green-600">
+                {isSpeaking ? "El agente está hablando..." : "Escuchando..."}
+              </p>
+            )}
+            {errorMessage && <p className="text-red-500">{errorMessage}</p>}
+            {!hasPermission && (
+              <p className="text-yellow-600">
+                Por favor, permite el acceso al micrófono para usar el chat de
+                voz
+              </p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
