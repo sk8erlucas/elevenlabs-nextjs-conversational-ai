@@ -10,7 +10,8 @@ export async function sendToEvaluation(messages: Message[]) {
   console.log("Enviando mensajes para evaluación:", messages);
   
   try {
-    const response = await fetch('https://n8n-2rxn.onrender.com/webhook-test/b0cfc8ec-a63f-4cc6-9c87-cb11a20211eb', {
+    // Llamamos a nuestra API route en lugar del webhook directamente
+    const response = await fetch('/api/evaluation', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
