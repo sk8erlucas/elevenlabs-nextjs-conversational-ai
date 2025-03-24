@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 
 // ElevenLabs
 import { useConversation } from "@11labs/react";
@@ -8,10 +8,10 @@ import { useConversation } from "@11labs/react";
 // UI
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { Download, Mic, MicOff, Volume2, VolumeX, Info } from "lucide-react";
 
 // Tipos
-import { Message } from "@/types/message";
+import type { Message } from "@/types/message";
 import { sendToEvaluation } from "@/lib/utils";
 
 const VoiceChat = () => {
@@ -202,16 +202,20 @@ const VoiceChat = () => {
   }, [messages]);
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          Chat de Voz
+    <Card className="w-full max-w-md mx-auto bg-corporate-white shadow-xl border-0">
+      <CardHeader className="border-b border-corporate-gray/10 pb-4">
+        <CardTitle className="flex items-center justify-between text-corporate-dark">
+          <span className="flex items-center">
+            <Info className="h-5 w-5 mr-2 text-corporate-violet" />
+            Asistente de Ventas
+          </span>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="icon"
               onClick={toggleMute}
               disabled={status !== "connected"}
+              className="border-corporate-gray/20 text-corporate-gray hover:text-corporate-violet hover:border-corporate-violet"
             >
               {isMuted ? (
                 <VolumeX className="h-4 w-4" />
@@ -225,15 +229,16 @@ const VoiceChat = () => {
               onClick={exportConversation}
               disabled={messages.length === 0}
               title="Exportar conversación"
+              className="border-corporate-gray/20 text-corporate-gray hover:text-corporate-violet hover:border-corporate-violet"
             >
               <Download className="h-4 w-4" />
             </Button>
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="relative aspect-video mb-4 rounded-lg overflow-hidden bg-gray-100">
+      <CardContent className="pt-6 pb-6">
+        <div className="space-y-6">
+          <div className="relative aspect-video rounded-lg overflow-hidden bg-corporate-dark/5 border border-corporate-gray/10">
             <video
               src={agentVideo}
               className="w-full h-full object-cover"
@@ -245,7 +250,7 @@ const VoiceChat = () => {
 
           {/* Indicador de mensajes guardados */}
           {messages.length > 0 && (
-            <div className="text-xs text-gray-500 mb-2 text-center">
+            <div className="text-xs text-corporate-gray text-center py-2 px-3 bg-corporate-gray/5 rounded-md">
               {messages.length} mensajes guardados
             </div>
           )}
@@ -255,32 +260,34 @@ const VoiceChat = () => {
               <Button
                 variant="destructive"
                 onClick={handleEndConversation}
-                className="w-full"
+                className="w-full py-6 bg-red-500 hover:bg-red-600 text-white"
               >
-                <MicOff className="mr-2 h-4 w-4" />
+                <MicOff className="mr-2 h-5 w-5" />
                 Finalizar Conversación
               </Button>
             ) : (
               <Button
                 onClick={handleStartConversation}
                 disabled={!hasPermission}
-                className="w-full"
+                className="w-full py-6 bg-corporate-violet hover:bg-corporate-violet/90 text-white"
               >
-                <Mic className="mr-2 h-4 w-4" />
+                <Mic className="mr-2 h-5 w-5" />
                 Iniciar Conversación
               </Button>
             )}
           </div>
 
-          <div className="text-center text-sm">
+          <div className="text-center">
             {status === "connected" && (
-              <p className="text-green-600">
+              <p className="text-green-600 font-medium">
                 {isSpeaking ? "El agente está hablando..." : "Escuchando..."}
               </p>
             )}
-            {errorMessage && <p className="text-red-500">{errorMessage}</p>}
+            {errorMessage && (
+              <p className="text-red-500 font-medium mt-2">{errorMessage}</p>
+            )}
             {!hasPermission && (
-              <p className="text-yellow-600">
+              <p className="text-amber-600 font-medium mt-2">
                 Por favor, permite el acceso al micrófono para usar el chat de
                 voz
               </p>
