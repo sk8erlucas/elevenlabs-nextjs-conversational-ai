@@ -9,6 +9,8 @@ import { useConversation } from "@11labs/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, Mic, MicOff, Volume2, VolumeX, Info } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 
 // Tipos
 import type { Message } from "@/types/message";
@@ -21,6 +23,12 @@ const VoiceChat = () => {
   const [agentVideo, setAgentVideo] = useState("/agent_01_idle.mp4");
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string>("");
+  const { toast } = useToast();
+
+  // Estados para la barra de progreso
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [processingStatus, setProcessingStatus] = useState("");
 
   // Usar una ref para mantener una copia actualizada de los mensajes que se pueda acceder desde callbacks
   const messagesRef = useRef<Message[]>([]);
@@ -40,17 +48,78 @@ const VoiceChat = () => {
       setAgentVideo("/agent_01_idle.mp4");
 
       try {
-        // Usar la nueva función para enviar los mensajes para evaluación
+        // Iniciar procesamiento
+        setIsProcessing(true);
+        setProgress(10);
+        setProcessingStatus("Preparando mensajes...");
+        
+        // Verificar si hay mensajes para guardar
+        if (messagesRef.current.length === 0) {
+          setProcessingStatus("No hay mensajes para procesar");
+          setProgress(100);
+          setTimeout(() => setIsProcessing(false), 1500);
+          return;
+        }
+
+        // Guardar la conversación en la base de datos
+        setProgress(30);
+        setProcessingStatus("Guardando conversación en la base de datos...");
+        
+        const response = await fetch("/api/conversations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: messagesRef.current,
+            conversationId: conversationId || undefined,
+          }),
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || "Error al guardar la conversación");
+        }
+        
+        // Si no teníamos un ID de conversación, guardamos el que nos devuelve la API
+        if (!conversationId && data.conversationId) {
+          setConversationId(data.conversationId);
+        }
+        
+        setProgress(60);
+        setProcessingStatus("Enviando datos para evaluación...");
+
+        // Usar la función para enviar los mensajes para evaluación
         const result = await sendToEvaluation(messagesRef.current);
 
         console.log("Resultado de evaluación:", result);
 
-        alert(
-          "Evaluación finalizada y enviada a su revisión, gracias por su tiempo"
-        );
+        setProgress(100);
+        setProcessingStatus("¡Proceso completado con éxito!");
+        
+        // Mostrar notificación de éxito
+        toast({
+          title: "Conversación finalizada",
+          description: "Evaluación finalizada y enviada a revisión, gracias por su tiempo",
+          variant: "success",
+        });
+        
+        // Ocultar la barra de progreso después de mostrarla completa
+        setTimeout(() => setIsProcessing(false), 1500);
       } catch (error) {
-        console.error("Error al enviar mensajes para evaluación:", error);
-        setErrorMessage("Error al enviar mensajes para evaluación");
+        console.error("Error al procesar la conversación:", error);
+        setErrorMessage("Error al procesar la conversación");
+        setProcessingStatus("Se produjo un error al procesar la información");
+        setProgress(100);
+        
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Error al procesar la conversación",
+          variant: "destructive",
+        });
+        
+        setTimeout(() => setIsProcessing(false), 1500);
       }
     },
     onMessage: (message) => {
@@ -84,6 +153,12 @@ const VoiceChat = () => {
       setErrorMessage(typeof error === "string" ? error : error.message);
       console.error("Error:", error);
       setAgentVideo("/agent_01_error.mp4");
+      
+      toast({
+        title: "Error de conversación",
+        description: typeof error === "string" ? error : error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -110,11 +185,17 @@ const VoiceChat = () => {
       } catch (error) {
         setErrorMessage("Acceso al micrófono denegado");
         console.error("Error al acceder al micrófono:", error);
+        
+        toast({
+          title: "Error de permisos",
+          description: "No se pudo acceder al micrófono. Por favor, verifica los permisos.",
+          variant: "destructive",
+        });
       }
     };
 
     requestMicPermission();
-  }, []);
+  }, [toast]);
 
   const handleStartConversation = async () => {
     try {
@@ -127,22 +208,37 @@ const VoiceChat = () => {
 
       // Reiniciar los mensajes para una nueva conversación
       setMessages([]);
+      
+      toast({
+        title: "Conversación iniciada",
+        description: "Puede comenzar a hablar con el asistente",
+        variant: "default",
+      });
     } catch (error) {
       setErrorMessage("Error al iniciar la conversación");
       console.error("Error al iniciar la conversación:", error);
+      
+      toast({
+        title: "Error",
+        description: "No se pudo iniciar la conversación",
+        variant: "destructive",
+      });
     }
   };
 
   const handleEndConversation = async () => {
     try {
-      // Hacer un registro de los mensajes ANTES de terminar la sesión
-      console.log("Mensajes antes de finalizar:", messages);
-
       await conversation.endSession();
-      // El onDisconnect se encargará de mostrar la alerta y hacer el console.log
+      // El onDisconnect se encargará de procesar los mensajes y enviar la evaluación
     } catch (error) {
       setErrorMessage("Error al finalizar la conversación");
       console.error("Error al finalizar la conversación:", error);
+      
+      toast({
+        title: "Error",
+        description: "No se pudo finalizar la conversación correctamente",
+        variant: "destructive",
+      });
     }
   };
 
@@ -150,9 +246,21 @@ const VoiceChat = () => {
     try {
       await conversation.setVolume({ volume: isMuted ? 1 : 0 });
       setIsMuted(!isMuted);
+      
+      toast({
+        title: isMuted ? "Audio activado" : "Audio desactivado",
+        description: isMuted ? "Ahora podrá escuchar al asistente" : "El asistente ha sido silenciado",
+        variant: "default",
+      });
     } catch (error) {
       setErrorMessage("Error al cambiar el volumen");
       console.error("Error al cambiar el volumen:", error);
+      
+      toast({
+        title: "Error",
+        description: "No se pudo cambiar el volumen",
+        variant: "destructive",
+      });
     }
   };
 
@@ -184,12 +292,12 @@ const VoiceChat = () => {
     // Limpiar
     URL.revokeObjectURL(url);
     document.body.removeChild(a);
-  };
-
-  // Función para formatear la fecha/hora para mostrar
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString();
+    
+    toast({
+      title: "Conversación exportada",
+      description: "El archivo JSON ha sido descargado correctamente",
+      variant: "success",
+    });
   };
 
   // Añadimos este useEffect para depurar y confirmar que los mensajes se guardan
@@ -254,12 +362,21 @@ const VoiceChat = () => {
               {messages.length} mensajes guardados
             </div>
           )}
+          
+          {/* Barra de progreso durante el procesamiento */}
+          {isProcessing && (
+            <div className="space-y-2">
+              <Progress value={progress} className="h-2" />
+              <p className="text-xs text-center text-corporate-gray">{processingStatus}</p>
+            </div>
+          )}
 
           <div className="flex justify-center">
             {status === "connected" ? (
               <Button
                 variant="destructive"
                 onClick={handleEndConversation}
+                disabled={isProcessing}
                 className="w-full py-6 bg-red-500 hover:bg-red-600 text-white"
               >
                 <MicOff className="mr-2 h-5 w-5" />
@@ -268,7 +385,7 @@ const VoiceChat = () => {
             ) : (
               <Button
                 onClick={handleStartConversation}
-                disabled={!hasPermission}
+                disabled={!hasPermission || isProcessing}
                 className="w-full py-6 bg-corporate-violet hover:bg-corporate-violet/90 text-white"
               >
                 <Mic className="mr-2 h-5 w-5" />
