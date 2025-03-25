@@ -12,6 +12,9 @@ export async function POST(req: NextRequest) {
     }
     
     const { messages, conversationId } = await req.json();
+
+    console.log('Mensajes recibidos:', messages);
+    console.log('ID de conversación:', conversationId);
     
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: 'No hay mensajes para guardar' }, { status: 400 });
