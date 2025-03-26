@@ -310,40 +310,7 @@ const VoiceChat = () => {
   }, [messages]);
 
   return (
-    <Card className="w-full max-w-md mx-auto bg-corporate-white shadow-xl border-0">
-      <CardHeader className="border-b border-corporate-gray/10 pb-4">
-        <CardTitle className="flex items-center justify-between text-corporate-dark">
-          <span className="flex items-center">
-            <Info className="h-5 w-5 mr-2 text-corporate-violet" />
-            Asistente de Ventas
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={toggleMute}
-              disabled={status !== "connected"}
-              className="border-corporate-gray/20 text-corporate-gray hover:text-corporate-violet hover:border-corporate-violet"
-            >
-              {isMuted ? (
-                <VolumeX className="h-4 w-4" />
-              ) : (
-                <Volume2 className="h-4 w-4" />
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={exportConversation}
-              disabled={messages.length === 0}
-              title="Exportar conversación"
-              className="border-corporate-gray/20 text-corporate-gray hover:text-corporate-violet hover:border-corporate-violet"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardTitle>
-      </CardHeader>
+    <Card className="w-full max-w-4xl mx-auto bg-corporate-white shadow-xl border-0">
       <CardContent className="pt-6 pb-6">
         <div className="space-y-6">
           <div className="relative aspect-video rounded-lg overflow-hidden bg-corporate-dark/5 border border-corporate-gray/10">

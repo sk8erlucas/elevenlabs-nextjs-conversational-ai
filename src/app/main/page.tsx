@@ -7,11 +7,8 @@ export default function Home() {
 
       <div className="max-w-4xl w-full text-center mb-8">
         <h1 className="text-5xl font-bold mb-3 text-corporate-white">
-          Entrenador y evaluador de ventas
+          Dialogus by CultivArte
         </h1>
-        <p className="text-corporate-gray/80 text-lg mb-8">
-          Mejora tus habilidades de venta con nuestro asistente de IA
-        </p>
       </div>
       
       <VoiceComponent />
