@@ -24,6 +24,13 @@ const VoiceChat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string>("");
   const { toast } = useToast();
+  
+  // Estado para el precargado de videos
+  const [videosPreloaded, setVideosPreloaded] = useState(false);
+  
+  // Refs para los videos
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const videosCache = useRef<Record<string, HTMLVideoElement>>({});
 
   // Estados para la barra de progreso
   const [isProcessing, setIsProcessing] = useState(false);
@@ -38,14 +45,85 @@ const VoiceChat = () => {
     messagesRef.current = messages;
   }, [messages]);
 
+  // Función para precargar videos
+  useEffect(() => {
+    const videoSources = [
+      "/agent_01_idle.mp4",
+      "/agent_01_speaking.mp4",
+      "/agent_01_listening.mp4",
+      "/agent_01_error.mp4"
+    ];
+    
+    const preloadVideos = async () => {
+      setProcessingStatus("Cargando recursos...");
+      setIsProcessing(true);
+      setProgress(0);
+      
+      const totalVideos = videoSources.length;
+      let loadedCount = 0;
+      
+      for (const src of videoSources) {
+        const video = document.createElement('video');
+        video.src = src;
+        video.preload = 'auto';
+        video.muted = true;
+        
+        await new Promise(resolve => {
+          video.onloadeddata = () => {
+            loadedCount++;
+            setProgress(Math.floor((loadedCount / totalVideos) * 100));
+            videosCache.current[src] = video;
+            resolve(true);
+          };
+          
+          // Por si hay un error o timeout
+          video.onerror = () => resolve(false);
+          setTimeout(() => resolve(false), 5000); // Timeout de 5 segundos
+        });
+      }
+      
+      setVideosPreloaded(true);
+      setIsProcessing(false);
+    };
+    
+    preloadVideos();
+  }, []);
+
+  // Función para cambiar videos con transición suave
+  const changeVideo = (newVideoSrc: string) => {
+    if (!videoRef.current || agentVideo === newVideoSrc) return;
+    
+    const currentVideo = videoRef.current;
+    
+    // Si el video ya está cargado en caché, usamos esa versión
+    if (videosCache.current[newVideoSrc]) {
+      // Guardar el tiempo actual para sincronizar
+      const currentTime = currentVideo.currentTime % 2; // Normalizar para loops cortos
+      
+      // Actualizar el src
+      setAgentVideo(newVideoSrc);
+      
+      // Una vez que el DOM se actualice, sincronizamos el tiempo
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.currentTime = currentTime;
+          videoRef.current.play().catch(e => console.error("Error playing video:", e));
+        }
+      }, 50);
+    } else {
+      // Si no está en caché, simplemente cambiamos el src
+      setAgentVideo(newVideoSrc);
+    }
+  };
+
   const conversation = useConversation({
     onConnect: () => {
       console.log("Conectado a ElevenLabs");
-      setAgentVideo("/agent_01_idle.mp4");
+      changeVideo("/agent_01_idle.mp4");
     },
     onDisconnect: async () => {
       console.log("Desconectado de ElevenLabs");
-      setAgentVideo("/agent_01_idle.mp4");
+      changeVideo("/agent_01_idle.mp4");
 
       try {
         // Iniciar procesamiento
@@ -152,7 +230,7 @@ const VoiceChat = () => {
     onError: (error: string | Error) => {
       setErrorMessage(typeof error === "string" ? error : error.message);
       console.error("Error:", error);
-      setAgentVideo("/agent_01_error.mp4");
+      changeVideo("/agent_01_error.mp4");
       
       toast({
         title: "Error de conversación",
@@ -167,12 +245,12 @@ const VoiceChat = () => {
   useEffect(() => {
     if (status === "connected") {
       if (isSpeaking) {
-        setAgentVideo("/agent_01_speaking.mp4");
+        changeVideo("/agent_01_speaking.mp4");
       } else {
-        setAgentVideo("/agent_01_listening.mp4");
+        changeVideo("/agent_01_listening.mp4");
       }
     } else {
-      setAgentVideo("/agent_01_idle.mp4");
+      changeVideo("/agent_01_idle.mp4");
     }
   }, [status, isSpeaking]);
 
@@ -314,13 +392,23 @@ const VoiceChat = () => {
       <CardContent className="pt-6 pb-6">
         <div className="space-y-6">
           <div className="relative aspect-video rounded-lg overflow-hidden bg-corporate-dark/5 border border-corporate-gray/10">
-            <video
-              src={agentVideo}
-              className="w-full h-full object-cover"
-              autoPlay
-              loop
-              muted
-            />
+            {videosPreloaded ? (
+              <video
+                ref={videoRef}
+                src={agentVideo}
+                className="w-full h-full object-cover"
+                autoPlay
+                loop
+                muted
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-corporate-dark/10">
+                <div className="text-center">
+                  <p className="text-sm text-corporate-gray mb-2">Cargando recursos...</p>
+                  <Progress value={progress} className="h-2 w-60" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Indicador de mensajes guardados */}
@@ -331,7 +419,7 @@ const VoiceChat = () => {
           )}
           
           {/* Barra de progreso durante el procesamiento */}
-          {isProcessing && (
+          {isProcessing && videosPreloaded && (
             <div className="space-y-2">
               <Progress value={progress} className="h-2" />
               <p className="text-xs text-center text-corporate-gray">{processingStatus}</p>
@@ -343,7 +431,7 @@ const VoiceChat = () => {
               <Button
                 variant="destructive"
                 onClick={handleEndConversation}
-                disabled={isProcessing}
+                disabled={isProcessing || !videosPreloaded}
                 className="w-full py-6 bg-red-500 hover:bg-red-600 text-white"
               >
                 <MicOff className="mr-2 h-5 w-5" />
@@ -352,7 +440,7 @@ const VoiceChat = () => {
             ) : (
               <Button
                 onClick={handleStartConversation}
-                disabled={!hasPermission || isProcessing}
+                disabled={!hasPermission || isProcessing || !videosPreloaded}
                 className="w-full py-6 bg-corporate-violet hover:bg-corporate-violet/90 text-white"
               >
                 <Mic className="mr-2 h-5 w-5" />
